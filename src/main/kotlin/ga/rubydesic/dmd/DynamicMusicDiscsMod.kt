@@ -1,19 +1,21 @@
 package ga.rubydesic.dmd
 
+// import net.fabricmc.fabric.api.networking.v1.
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import ga.rubydesic.dmd.analytics.Analytics
 import ga.rubydesic.dmd.game.ClientboundPlayMusicPacket
 import ga.rubydesic.dmd.game.DynamicRecordItem
 import ga.rubydesic.dmd.util.using
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
 import net.fabricmc.api.EnvType
-import net.fabricmc.fabric.api.network.ClientSidePacketRegistry
+import net.fabricmc.fabric.api.item.v1.FabricItemSettings
 import net.fabricmc.loader.api.FabricLoader
-import net.minecraft.core.Registry
-import net.minecraft.resources.ResourceLocation
-import net.minecraft.world.item.CreativeModeTab
-import net.minecraft.world.item.Item
+import net.minecraft.item.ItemGroup
+import net.minecraft.util.Identifier
+import net.minecraft.util.registry.Registry
 import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.logging.log4j.LogManager
@@ -29,15 +31,14 @@ import java.nio.file.attribute.PosixFilePermissions
 // For support join https://discord.gg/pPAabdafJU
 
 const val MOD_ID = "dynamic-discs"
-const val MOD_VERSION = "2.1.0"
+const val MOD_VERSION = "2.0.8"
 
 val dir: Path = Paths.get("dynamic-discs")
 val cacheDir: Path = dir.resolve("cache")
 
-
-val dynamicRecordItem = DynamicRecordItem(Item.Properties().tab(CreativeModeTab.TAB_MISC).stacksTo(1))
-
 val log: Logger = LogManager.getLogger("Dynamic Discs")
+
+val dynamicRecordItem = DynamicRecordItem(FabricItemSettings().group(ItemGroup.MISC).maxCount(1))
 lateinit var ytdlBinaryFuture: Deferred<Path>
 var config = Config()
 
@@ -53,17 +54,10 @@ fun init() {
 
     log.info("Natives extracted!")
 
-    Analytics.event("Start Game", session = true)
-    Runtime.getRuntime().addShutdownHook(Thread {
-        runBlocking {
-            Analytics.event("End Game", session = false).join()
-        }
-    })
-
-    Registry.register(Registry.ITEM, ResourceLocation(MOD_ID, "dynamic_disc"), dynamicRecordItem)
+    Registry.register(Registry.ITEM, Identifier(MOD_ID, "dynamic_disc"), dynamicRecordItem)
 
     if (!isDedicatedServer) {
-        ClientboundPlayMusicPacket.register(ClientSidePacketRegistry.INSTANCE)
+        ClientboundPlayMusicPacket.register()
     }
 
     deleteOldCache()
@@ -89,7 +83,7 @@ fun readConfig() {
 }
 
 fun setupVelvet() {
-    val target = Paths.get(System.getProperty("user.home"), ".velvet-video", "natives", "0.2.8.full")
+    val target = Paths.get(System.getProperty("user.home"), ".velvet-video", "natives", "0.2.7.full")
     Files.createDirectories(target)
 
     if (SystemUtils.IS_OS_WINDOWS) {
@@ -147,36 +141,29 @@ fun clearCacheIfOutdated() {
     }
 }
 
-private enum class YoutubeDlPlatform(
-    val fileName: String,
-    val downloadUrl: String,
-    val isCurrentPlatform: Boolean
-) {
-    WINDOWS("yt-dlp.exe", "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe", SystemUtils.IS_OS_WINDOWS),
-    MACOS("yt-dlp_macos", "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos", SystemUtils.IS_OS_MAC),
-    LINUX("yt-dlp", "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp", SystemUtils.IS_OS_LINUX)
-}
-
 fun downloadYtDlBinary() {
-    val currentPlatform = YoutubeDlPlatform.values().find { it.isCurrentPlatform }
-        ?: throw IllegalStateException("Non-valid OS detected (not Windows, Linux, or Mac)")
-
-    log.info("Detected OS is ${currentPlatform.name}, downloading appropriate youtube-dl binary from ${currentPlatform.downloadUrl}")
-    val path = dir.resolve(currentPlatform.fileName).toAbsolutePath()
-
+    val path = dir.resolve(if (SystemUtils.IS_OS_WINDOWS) "youtube-dl.exe" else "youtube-dl").toAbsolutePath()
     if (Files.exists(path)) {
         log.info("youtube-dl binary already exists")
         setYTDLPermission(path)
 
-        log.info("Updating youtube-dl")
+        log.info("Running youtube-dl --update")
         ytdlBinaryFuture = GlobalScope.async(Dispatchers.IO) {
             runCommand(path.toString(), "--update")
             path
         }
     } else {
+        val downloadUrl = if (SystemUtils.IS_OS_WINDOWS) {
+            log.info("Detected OS is Windows, downloading Windows youtube-dl binary")
+            "https://yt-dl.org/downloads/latest/youtube-dl.exe"
+        } else {
+            log.info("Detected OS is not Windows, downloading MacOS/Linux youtube-dl binary")
+            "https://yt-dl.org/downloads/latest/youtube-dl"
+        }
+
         ytdlBinaryFuture = GlobalScope.async(Dispatchers.IO) {
             using(
-                openInsecureConnection(currentPlatform.downloadUrl).getInputStream(),
+                openInsecureConnection(downloadUrl).getInputStream(),
                 Files.newOutputStream(path)
             ) { input, output ->
                 input.copyTo(output)
@@ -198,5 +185,3 @@ fun setYTDLPermission(path: Path){
         log.info("Failed to make youtube-dl binary executable...", ex)
     }
 }
-
-

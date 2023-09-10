@@ -3,7 +3,6 @@ package ga.rubydesic.dmd.download
 import com.google.common.cache.CacheBuilder
 import com.google.gson.Gson
 import com.zakgof.velvetvideo.impl.FileSeekableInput
-import ga.rubydesic.dmd.analytics.Analytics
 import ga.rubydesic.dmd.cacheDir
 import ga.rubydesic.dmd.download.MusicSource.YOUTUBE
 import ga.rubydesic.dmd.fromJson
@@ -12,7 +11,7 @@ import ga.rubydesic.dmd.util.AudioStreamVelvet
 import ga.rubydesic.dmd.util.FileBufferedSeekableInput
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.future
-import net.minecraft.client.sounds.AudioStream
+import net.minecraft.client.sound.AudioStream
 import org.apache.commons.io.FileUtils
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -46,7 +45,6 @@ object MusicCache {
 
     suspend fun getAudioStream(mid: MusicId): AudioStream? {
         val info = getPlaybackInfo(mid) ?: return null
-        Analytics.event("Get Audio Stream", false, mid.toNormalString())
 
         return AudioStreamVelvet(info.input)
     }

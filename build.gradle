@@ -1,8 +1,8 @@
 plugins {
-    id "fabric-loom"
-    id "maven-publish"
+    id 'fabric-loom' version '1.2.7'
+    id 'maven-publish'
     id "org.jetbrains.kotlin.jvm"
-    id "com.github.johnrengelman.shadow" version "5.0.0"
+    id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
 sourceCompatibility = JavaVersion.VERSION_17
@@ -23,26 +23,31 @@ repositories {
 }
 
 dependencies {
-    //to change the versions see the gradle.properties file
+    // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.officialMojangMappings()
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
+    // Fabric API. This is technically optional, but you probably want it anyway.
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     modImplementation "net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}"
 
-    shade("com.github.zakgof:velvet-video:0.5.2") {
+// https://mvnrepository.com/artifact/com.github.zakgof/velvet-video
+    shade('com.github.zakgof:velvet-video:0.5.2') {
         exclude module: "guava"
         exclude group: "org.ow2.asm"
+        exclude group: "org.slf4j"
     }
-    shade "com.github.zakgof:velvet-video-natives:0.2.8.full"
+    shade 'com.github.zakgof:velvet-video-natives:0.2.8.full'
 }
 
 processResources {
     inputs.property "version", project.version
 
-    filesMatching("fabric.mod.json") {
+    from(sourceSets.main.resources.srcDirs) {
+        include "fabric.mod.json"
         expand "version": project.version
+        duplicatesStrategy(DuplicatesStrategy.INCLUDE)
     }
 }
 
@@ -51,6 +56,11 @@ processResources {
 // see http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
 tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
+}
+
+
+tasks.withType(JavaCompile).configureEach {
+    // Minecraft 1.18 (1.18-pre2) upwards uses Java 17.
     it.options.release = 17
 }
 
@@ -58,7 +68,6 @@ tasks.withType(JavaCompile) {
 // if it is present.
 // If you remove this task, sources will not be generated.
 task sourcesJar(type: Jar, dependsOn: classes) {
-    classifier = "sources"
     from sourceSets.main.allSource
 }
 
@@ -67,8 +76,8 @@ jar {
 }
 
 shadowJar {
-    classifier "useless"
     configurations = [project.configurations.shade]
+    relocate 'com.zakgof', 'ga.rubydesic.dmd.libs.com.zakgof'
 }
 
 remapJar {
@@ -93,8 +102,7 @@ publishing {
     // select the repositories you want to publish to
     repositories {
         // uncomment to publish to the local maven
-        // mavenLocal()
+        mavenLocal()
     }
 }
-
-compileKotlin.kotlinOptions.jvmTarget = "1.8"
+compileKotlin.kotlinOptions.jvmTarget = "17"
